@@ -1,6 +1,7 @@
 #!/usr/bin/env -S deno run --allow-read
 import { readLines } from "https://deno.land/std@0.125.0/io/mod.ts";
 import * as path from "https://deno.land/std@0.125.0/path/mod.ts";
+import MarkdownIt from "https://esm.sh/markdown-it@12.3.2";
 
 // async function jamon() {
 //   const json = await data_stdin();
@@ -11,11 +12,16 @@ import * as path from "https://deno.land/std@0.125.0/path/mod.ts";
 
 type ArrayOptions = { container?: string; item?: string };
 type ImageOptions = { ids?: string[]; width?: string; height?: string };
-type CLIOptions = { array?: ArrayOptions; images?: ImageOptions };
+type CLIOptions = {
+  markdown?: boolean;
+  array?: ArrayOptions;
+  images?: ImageOptions;
+};
 async function json2html(filename: string, options: CLIOptions = {}) {
   const json = await data_file(filename);
   const origin = JSON.parse(json.join(""));
 
+  const markdown = options?.markdown;
   const html_elements = [];
   if (Array.isArray(origin)) {
     const container = options?.array?.container;
@@ -26,12 +32,12 @@ async function json2html(filename: string, options: CLIOptions = {}) {
     const image = { ids, width, height };
     for (const [key, val] of Object.entries(origin)) {
       html_elements.push(
-        build_array_html(key, val, { container, item, image })
+        build_array_html(key, val, { container, item, image, markdown })
       );
     }
   } else {
     for (const [key, val] of Object.entries(origin)) {
-      html_elements.push(build_html({ key, val }));
+      html_elements.push(build_html({ key, val, markdown }));
     }
   }
   return html_elements.join("\n");
@@ -173,7 +179,8 @@ Deno.test(
 );
 
 Deno.test("can output images with proper <img> element", async function () {
-  const html = `<ul id="0">
+  let html, image_opts;
+  html = `<ul id="0">
   <li id="title">cage gif</li>
   <li id="image"><img src="https://www.placecage.com/gif/200/300" alt="image" width="50" height="auto"></li>
 </ul>
@@ -181,10 +188,44 @@ Deno.test("can output images with proper <img> element", async function () {
   <li id="title">cage crazy</li>
   <li id="image"><img src="https://www.placecage.com/c/200/300" alt="image" width="50" height="auto"></li>
 </ul>`;
-  const image_opts = {
-    images: { ids: ["image"], width: "50", height: "auto" },
+  image_opts = {
+    images: { ids: ["image"], width: "50" },
   };
   assertEquals(await json2html("_images.json", image_opts), html);
+
+  html = `<ul id="0">
+  <li id="title">cage gif</li>
+  <li id="image"><img src="https://www.placecage.com/gif/200/300" alt="image" width="auto" height="50"></li>
+</ul>
+<ul id="1">
+  <li id="title">cage crazy</li>
+  <li id="image"><img src="https://www.placecage.com/c/200/300" alt="image" width="auto" height="50"></li>
+</ul>`;
+  image_opts = {
+    images: { ids: ["image"], height: "50" },
+  };
+  assertEquals(await json2html("_images.json", image_opts), html);
+});
+
+Deno.test("can render common markdown", async function () {
+  const html = `<div id="text"><p>textos</p>\n</div>
+<ul id="array">
+  <li id="0">0</li>
+  <li id="1">1</li>
+  <li id="2">2</li>
+  <li id="3">3</li>
+</ul>
+<div id="italik"><p><em>hola</em> and <em>hello</em></p>\n</div>
+<div id="negritas"><p><strong>Bold</strong> and <strong>bold</strong></p>\n</div>
+<div id="heading"><h3>Heading 3</h3>\n</div>
+<div id="link"><p><a href="http://a.com">Link</a></p>\n</div>
+<div id="image"><p><img src="http://url/a.png" alt="Image"></p>\n</div>
+<div id="cita"><blockquote>\n<p>una cita.</p>\n</blockquote>\n</div>
+<div id="lista"><ul>\n<li>List</li>\n</ul>\n</div>
+<div id="number_list"><ol>\n<li>One</li>\n</ol>\n</div>
+<div id="horizontal"><hr>\n</div>
+<div id="inline"><p><code>Inline code</code> with backticks</p>\n</div>`;
+  assertEquals(await json2html("_markdown.json", { markdown: true }), html);
 });
 
 type Build = {
@@ -193,17 +234,32 @@ type Build = {
   el?: string;
   insert?: string;
   iteration?: number;
+  markdown?: boolean;
   image?: ImageOptions;
 };
 
 function build_html(spec: Build): string {
-  let { key, val, el = "div", insert = "", iteration = 0, image } = spec;
+  let {
+    key,
+    val,
+    el = "div",
+    insert = "",
+    iteration = 0,
+    image,
+    markdown = false,
+  } = spec;
 
   if (image?.ids?.includes(key as string)) {
-    val = `<img src="${val}" alt="image" width="50" height="auto">`;
+    const width = image.width ?? "auto";
+    const height = image.height ?? "auto";
+    val = `<img src="${val}" alt="image" width="${width}" height="${height}">`;
   }
 
   if (typeof val === "string") {
+    if (markdown) {
+      const md = new MarkdownIt();
+      val = md.render(val);
+    }
     return `${insert.repeat(iteration)}<${el} id="${key}">${val}</${el}>`;
   } else if (typeof val === "number") {
     return `${insert.repeat(iteration)}<${el} id="${key}">${val}</${el}>`;
@@ -228,12 +284,16 @@ type BuildArray = {
   item?: string;
   insert?: string;
   iteration?: number;
+  markdown?: boolean;
   image?: ImageOptions;
 };
 function build_object_html(
   object_id: unknown,
   object_values: Record<string, unknown>,
-  { iteration = 0 }: { iteration?: number } = {}
+  {
+    iteration = 0,
+    markdown = false,
+  }: { markdown?: boolean; iteration?: number } = {}
 ) {
   const object_elements = [];
   for (const [key, val] of Object.entries(object_values)) {
@@ -243,6 +303,7 @@ function build_object_html(
         val,
         iteration: iteration + 1,
         insert: "  ",
+        markdown,
       })
     );
   }

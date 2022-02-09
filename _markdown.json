@@ -1,0 +1,14 @@
+{
+  "text": "textos",
+  "array": [0, 1, 2, 3],
+  "italik": "*hola* and _hello_",
+  "negritas": "**Bold** and __bold__",
+  "heading": "### Heading 3",
+  "link": "[Link](http://a.com)",
+  "image": "![Image](http://url/a.png)",
+  "cita": "> una cita.",
+  "lista": "* List",
+  "number_list": "1. One",
+  "horizontal": "---",
+  "inline": "`Inline code` with backticks"
+}
