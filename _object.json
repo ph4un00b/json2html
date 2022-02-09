@@ -1,0 +1,11 @@
+{
+  "title": "object json",
+  "id": 31337,
+  "sexy": true,
+  "human": false,
+  "password": null,
+  "fancy-object": {
+    "title": "fancy",
+    "description": "lorem text for the sake of test this out!"
+  }
+}
