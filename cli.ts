@@ -1,3 +1,4 @@
+#!/usr/bin/env -S deno run --allow-read
 import { json2html } from "./json2html.ts";
 import { readLines } from "https://deno.land/std@0.125.0/io/mod.ts";
 
