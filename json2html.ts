@@ -10,26 +10,28 @@ import * as path from "https://deno.land/std@0.125.0/path/mod.ts";
 // }
 
 type ArrayOptions = { container?: string; item?: string };
-type ImageOptions = { ids?: string[], width?: string; height?: string };
+type ImageOptions = { ids?: string[]; width?: string; height?: string };
 type CLIOptions = { array?: ArrayOptions; images?: ImageOptions };
 async function json2html(filename: string, options: CLIOptions = {}) {
   const json = await data_file(filename);
-  const o = JSON.parse(json.join(""));
+  const origin = JSON.parse(json.join(""));
 
   const html_elements = [];
-  if (Array.isArray(o)) {
+  if (Array.isArray(origin)) {
     const container = options?.array?.container;
     const item = options?.array?.item;
     const ids = options?.images?.ids;
     const width = options?.images?.width;
     const height = options?.images?.height;
-    const image = { ids, width, height }
-    for (const [k, v] of Object.entries(o)) {
-      html_elements.push(build_array_html(k, v, { container, item, image }));
+    const image = { ids, width, height };
+    for (const [key, val] of Object.entries(origin)) {
+      html_elements.push(
+        build_array_html(key, val, { container, item, image })
+      );
     }
   } else {
-    for (const [k, v] of Object.entries(o)) {
-      html_elements.push(build_html({ k, v }));
+    for (const [key, val] of Object.entries(origin)) {
+      html_elements.push(build_html({ key, val }));
     }
   }
   return html_elements.join("\n");
@@ -171,7 +173,7 @@ Deno.test(
 );
 
 Deno.test("can output images with proper <img> element", async function () {
-  let html = `<ul id="0">
+  const html = `<ul id="0">
   <li id="title">cage gif</li>
   <li id="image"><img src="https://www.placecage.com/gif/200/300" alt="image" width="50" height="auto"></li>
 </ul>
@@ -179,13 +181,15 @@ Deno.test("can output images with proper <img> element", async function () {
   <li id="title">cage crazy</li>
   <li id="image"><img src="https://www.placecage.com/c/200/300" alt="image" width="50" height="auto"></li>
 </ul>`;
-  let image_opts = { images: { ids: ["image"], width: "50", height: "auto" } };
+  const image_opts = {
+    images: { ids: ["image"], width: "50", height: "auto" },
+  };
   assertEquals(await json2html("_images.json", image_opts), html);
 });
 
 type Build = {
-  k: unknown;
-  v: unknown;
+  key: unknown;
+  val: unknown;
   el?: string;
   insert?: string;
   iteration?: number;
@@ -193,39 +197,28 @@ type Build = {
 };
 
 function build_html(spec: Build): string {
-  let { k, v, el = "div", insert = "", iteration = 0, image } = spec;
+  let { key, val, el = "div", insert = "", iteration = 0, image } = spec;
 
-  if (image?.ids?.includes(k as string)) {
-    v = `<img src="${v}" alt="image" width="50" height="auto">`
+  if (image?.ids?.includes(key as string)) {
+    val = `<img src="${val}" alt="image" width="50" height="auto">`;
   }
 
-  if (typeof v === "string") {
-    return `${insert.repeat(iteration)}<${el} id="${k}">${v}</${el}>`;
-  } else if (typeof v === "number") {
-    return `${insert.repeat(iteration)}<${el} id="${k}">${v}</${el}>`;
-  } else if (typeof v === "boolean" && v === true) {
-    return `${insert.repeat(iteration)}<${el} id="${k}">${v}</${el}>`;
-  } else if (typeof v === "boolean" && v === false) {
-    return `${insert.repeat(iteration)}<${el} id="${k}">${v}</${el}>`;
-  } else if (typeof v === "object" /* lol */ && v === null) {
-    return `${insert.repeat(iteration)}<${el} id="${k}">null</${el}>`;
-  } else if (Array.isArray(v)) {
-    return build_array_html(k, v, { iteration, insert: "  " });
-  } else if (typeof v === "object" && v !== null) {
-    const object_elements = [];
-    for (const [k_object, v_object] of Object.entries(v)) {
-      object_elements.push(
-        build_html({
-          k: k_object,
-          v: v_object,
-          iteration: iteration + 1,
-          insert: "  ",
-        })
-      );
-    }
-    return `<div id="${k}">
-${object_elements.join("\n")}
-</div>`;
+  if (typeof val === "string") {
+    return `${insert.repeat(iteration)}<${el} id="${key}">${val}</${el}>`;
+  } else if (typeof val === "number") {
+    return `${insert.repeat(iteration)}<${el} id="${key}">${val}</${el}>`;
+  } else if (typeof val === "boolean" && val === true) {
+    return `${insert.repeat(iteration)}<${el} id="${key}">${val}</${el}>`;
+  } else if (typeof val === "boolean" && val === false) {
+    return `${insert.repeat(iteration)}<${el} id="${key}">${val}</${el}>`;
+  } else if (typeof val === "object" /* lol */ && val === null) {
+    return `${insert.repeat(iteration)}<${el} id="${key}">null</${el}>`;
+  } else if (Array.isArray(val)) {
+    return build_array_html(key, val, { iteration, insert: "  " });
+  } else if (typeof val === "object" && val !== null) {
+    return build_object_html(key, val as Record<string, unknown>, {
+      iteration,
+    });
   }
   return "";
 }
@@ -237,29 +230,57 @@ type BuildArray = {
   iteration?: number;
   image?: ImageOptions;
 };
-function build_array_html(
-  k: unknown,
-  v: unknown[],
-  { container = "ul", item = "li", insert = "", iteration = 0, image }: BuildArray = {}
+function build_object_html(
+  object_id: unknown,
+  object_values: Record<string, unknown>,
+  { iteration = 0 }: { iteration?: number } = {}
 ) {
-  const li_elements = [];
-  for (const [array_name, array_values] of Object.entries(v)) {
-    li_elements.push(
+  const object_elements = [];
+  for (const [key, val] of Object.entries(object_values)) {
+    object_elements.push(
       build_html({
-        k: array_name,
-        v: array_values,
-        el: item,
-        insert: "  ",
+        key,
+        val,
         iteration: iteration + 1,
-        image
+        insert: "  ",
       })
     );
   }
-  return `${insert.repeat(iteration)}<${container} id="${k}">
+  return `<div id="${object_id}">
+${object_elements.join("\n")}
+</div>`;
+}
+
+function build_array_html(
+  array_id: unknown,
+  array_values: unknown[],
+  {
+    container = "ul",
+    item = "li",
+    image,
+    insert = "",
+    iteration = 0,
+  }: BuildArray = {}
+) {
+  const li_elements = [];
+  for (const [key, val] of Object.entries(array_values)) {
+    li_elements.push(
+      build_html({
+        key,
+        val,
+        image,
+        el: item,
+        insert: "  ",
+        iteration: iteration + 1,
+      })
+    );
+  }
+  return `${insert.repeat(iteration)}<${container} id="${array_id}">
 ${li_elements.join("\n")}
 ${insert.repeat(iteration)}</${container}>`;
 }
 
+// deno-lint-ignore no-unused-vars
 async function data_stdin() {
   const json = [];
   for await (const l of readLines(Deno.stdin)) {
@@ -270,7 +291,7 @@ async function data_stdin() {
 
 async function data_file(file: string) {
   const filename = path.join(Deno.cwd(), file);
-  let fileReader = await Deno.open(filename);
+  const fileReader = await Deno.open(filename);
   const json = [];
   for await (const l of readLines(fileReader)) {
     json.push(l);
