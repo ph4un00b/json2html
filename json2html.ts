@@ -21,23 +21,28 @@ async function json2html(filename: string, options: CLIOptions = {}) {
   const json = await data_file(filename);
   const origin = JSON.parse(json.join(""));
 
+  const ids = options?.images?.ids;
+  const width = options?.images?.width;
+  const height = options?.images?.height;
+  const image = { ids, width, height };
   const markdown = options?.markdown;
   const html_elements = [];
   if (Array.isArray(origin)) {
     const container = options?.array?.container;
     const item = options?.array?.item;
-    const ids = options?.images?.ids;
-    const width = options?.images?.width;
-    const height = options?.images?.height;
-    const image = { ids, width, height };
     for (const [key, val] of Object.entries(origin)) {
-      html_elements.push(
-        build_array_html(key, val, { container, item, image, markdown })
-      );
+      const el = build_array_html(key, val, {
+        container,
+        item,
+        image,
+        markdown,
+      });
+      html_elements.push(el);
     }
   } else {
     for (const [key, val] of Object.entries(origin)) {
-      html_elements.push(build_html({ key, val, markdown }));
+      const el = build_html({ key, val, markdown, image });
+      html_elements.push(el);
     }
   }
   return html_elements.join("\n");
@@ -126,6 +131,7 @@ Deno.test("can parse object value", async function () {
 <div id="sexy">true</div>
 <div id="human">false</div>
 <div id="password">null</div>
+<div id="image">image.jpg</div>
 <div id="fancy-object">
   <div id="title">fancy</div>
   <div id="description">lorem text for the sake of test this out!</div>
@@ -228,6 +234,22 @@ Deno.test("can render common markdown", async function () {
   assertEquals(await json2html("_markdown.json", { markdown: true }), html);
 });
 
+Deno.test("can parse object value with images", async function () {
+  const html = `<div id="title">object json</div>
+<div id="id">31337</div>
+<div id="sexy">true</div>
+<div id="human">false</div>
+<div id="password">null</div>
+<div id="image"><img src="image.jpg" alt="image" width="auto" height="auto"></div>
+<div id="fancy-object">
+  <div id="title">fancy</div>
+  <div id="description">lorem text for the sake of test this out!</div>
+</div>`;
+  assertEquals(
+    await json2html("_object.json", { images: { ids: ["image"] } }),
+    html
+  );
+});
 type Build = {
   key: unknown;
   val: unknown;

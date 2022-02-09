@@ -4,6 +4,7 @@
   "sexy": true,
   "human": false,
   "password": null,
+  "image": "image.jpg",
   "fancy-object": {
     "title": "fancy",
     "description": "lorem text for the sake of test this out!"
