@@ -1,3 +1,7 @@
+- usage:
+
+$ echo "{ \"title\": \"parsed\"}" | deno run cli.ts
+
 - run test:
 
-$ deno test --allow-read json2html.ts --watch   
+$ deno test --allow-read . --watch  
