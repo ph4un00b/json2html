@@ -16,9 +16,7 @@ export async function from_file(filename: string, options: CLIOptions = {}) {
   return json2html(origin, options);
 }
 
-type Build = {
-  key: unknown;
-  val: unknown;
+type BuildOptions = {
   el?: string;
   insert?: string;
   iteration?: number;
@@ -32,70 +30,94 @@ export function json2html(origin: any, options?: CLIOptions) {
   const height = options?.images?.height;
   const image = { ids, width, height };
   const markdown = options?.markdown;
-  const html_elements = [];
+
+  const elements = [];
   if (Array.isArray(origin)) {
     const container = options?.array?.container;
     const item = options?.array?.item;
+    const opts = { container, item, image, markdown };
     for (const [key, val] of Object.entries(origin)) {
-      const el = build_array_html(key, val, {
-        container,
-        item,
-        image,
-        markdown,
-      });
-      html_elements.push(el);
+      const el = _build_array(key, val, opts);
+      elements.push(el);
     }
   } else {
     for (const [key, val] of Object.entries(origin)) {
-      const el = build_html({ key, val, markdown, image });
-      html_elements.push(el);
+      const el = _build_html(key, val, { markdown, image });
+      elements.push(el);
     }
   }
-  return html_elements.join("\n");
+  return elements.join("\n");
 }
 
-function build_html(spec: Build): string {
-  let {
-    key,
-    val,
+function _build_html(key: unknown, val: unknown, spec: BuildOptions): string {
+  const {
+    image,
     el = "div",
     insert = "",
     iteration = 0,
-    image,
     markdown = false,
   } = spec;
 
   if (image?.ids?.includes(key as string)) {
     const width = image.width ?? "auto";
     const height = image.height ?? "auto";
-    val = `<img src="${val}" alt="image" width="${width}" height="${height}">`;
+    val = _html_img_template(val, width, height);
   }
 
   if (typeof val === "string") {
-    if (markdown) {
-      const md = new MarkdownIt();
-      val = md.render(val);
-    }
-    return `${insert.repeat(iteration)}<${el} id="${key}">${val}</${el}>`;
+    if (markdown) val = new MarkdownIt().render(val);
+    return _string_template(insert, iteration, el, key, val);
   } else if (typeof val === "number") {
-    return `${insert.repeat(iteration)}<${el} id="${key}">${val}</${el}>`;
+    return _number_template(insert, iteration, el, key, val);
   } else if (typeof val === "boolean" && val === true) {
-    return `${insert.repeat(iteration)}<${el} id="${key}">${val}</${el}>`;
+    return _true_template(insert, iteration, el, key, val);
   } else if (typeof val === "boolean" && val === false) {
-    return `${insert.repeat(iteration)}<${el} id="${key}">${val}</${el}>`;
+    return _false_template(insert, iteration, el, key, val);
   } else if (typeof val === "object" /* lol */ && val === null) {
-    return `${insert.repeat(iteration)}<${el} id="${key}">null</${el}>`;
+    return _null_template(insert, iteration, el, key);
   } else if (Array.isArray(val)) {
-    return build_array_html(key, val, { iteration, insert: "  " });
+    return _build_array(key, val, { iteration, insert: "  " });
   } else if (typeof val === "object" && val !== null) {
-    return build_object_html(key, val as Record<string, unknown>, {
+    return _build_object(key, val as Record<string, unknown>, {
       iteration,
     });
   }
   return "";
 }
 
-type BuildArray = {
+function _build_array(
+  array_id: unknown,
+  array_values: unknown[],
+  spec: BuildArrayOptions = {}
+) {
+  const {
+    container = "ul",
+    item = "li",
+    image,
+    insert = "",
+    iteration = 0,
+  } = spec;
+  const items = [];
+  const opts = { image, el: item, insert: "  ", iteration: iteration + 1 };
+  for (const [key, val] of Object.entries(array_values)) {
+    items.push(_build_html(key, val, opts));
+  }
+  return _array_template(insert, iteration, container, array_id, items);
+}
+
+function _array_template(
+  insert: string,
+  iteration: number,
+  container: string,
+  array_id: unknown,
+  li_elements: string[]
+) {
+  return `${insert.repeat(iteration)}<${container} id="${array_id}">
+${li_elements.join("\n")}
+${insert.repeat(iteration)}</${container}>`;
+}
+
+type BuildArrayOptions = {
   container?: string;
   item?: string;
   insert?: string;
@@ -103,7 +125,64 @@ type BuildArray = {
   markdown?: boolean;
   image?: ImageOptions;
 };
-function build_object_html(
+function _html_img_template(
+  val: unknown,
+  width: string,
+  height: string
+): unknown {
+  return `<img src="${val}" alt="image" width="${width}" height="${height}">`;
+}
+
+function _null_template(
+  insert: string,
+  iteration: number,
+  el: string,
+  key: unknown
+): string {
+  return `${insert.repeat(iteration)}<${el} id="${key}">null</${el}>`;
+}
+
+function _false_template(
+  insert: string,
+  iteration: number,
+  el: string,
+  key: unknown,
+  val: boolean
+): string {
+  return `${insert.repeat(iteration)}<${el} id="${key}">${val}</${el}>`;
+}
+
+function _true_template(
+  insert: string,
+  iteration: number,
+  el: string,
+  key: unknown,
+  val: boolean
+): string {
+  return `${insert.repeat(iteration)}<${el} id="${key}">${val}</${el}>`;
+}
+
+function _number_template(
+  insert: string,
+  iteration: number,
+  el: string,
+  key: unknown,
+  val: number
+): string {
+  return `${insert.repeat(iteration)}<${el} id="${key}">${val}</${el}>`;
+}
+
+function _string_template(
+  insert: string,
+  iteration: number,
+  el: string,
+  key: unknown,
+  val: unknown
+): string {
+  return `${insert.repeat(iteration)}<${el} id="${key}">${val}</${el}>`;
+}
+
+function _build_object(
   object_id: unknown,
   object_values: Record<string, unknown>,
   {
@@ -112,49 +191,17 @@ function build_object_html(
   }: { markdown?: boolean; iteration?: number } = {}
 ) {
   const object_elements = [];
+  const opts = { iteration: iteration + 1, insert: "  ", markdown };
   for (const [key, val] of Object.entries(object_values)) {
-    object_elements.push(
-      build_html({
-        key,
-        val,
-        iteration: iteration + 1,
-        insert: "  ",
-        markdown,
-      })
-    );
+    object_elements.push(_build_html(key, val, opts));
   }
+  return _object_template(object_id, object_elements);
+}
+
+function _object_template(object_id: unknown, object_elements: string[]) {
   return `<div id="${object_id}">
 ${object_elements.join("\n")}
 </div>`;
-}
-
-function build_array_html(
-  array_id: unknown,
-  array_values: unknown[],
-  {
-    container = "ul",
-    item = "li",
-    image,
-    insert = "",
-    iteration = 0,
-  }: BuildArray = {}
-) {
-  const li_elements = [];
-  for (const [key, val] of Object.entries(array_values)) {
-    li_elements.push(
-      build_html({
-        key,
-        val,
-        image,
-        el: item,
-        insert: "  ",
-        iteration: iteration + 1,
-      })
-    );
-  }
-  return `${insert.repeat(iteration)}<${container} id="${array_id}">
-${li_elements.join("\n")}
-${insert.repeat(iteration)}</${container}>`;
 }
 
 export async function data_file(file: string) {
